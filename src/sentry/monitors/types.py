@@ -29,6 +29,7 @@ class CheckinPayload(TypedDict):
     check_in_id: str
     monitor_slug: str
     status: str
+    status_code: NotRequired[int]
     environment: NotRequired[str]
     duration: NotRequired[int]
     monitor_config: NotRequired[Dict]

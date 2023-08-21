@@ -3,6 +3,7 @@ import {ObjectStatus, Project} from 'sentry/types';
 export enum MonitorType {
   UNKNOWN = 'unknown',
   CRON_JOB = 'cron_job',
+  UPTIME = 'uptime',
 }
 
 /**
@@ -87,6 +88,7 @@ export interface Monitor {
   slug: string;
   status: ObjectStatus;
   type: MonitorType;
+  url: string;
   alertRule?: {
     targets: Array<{
       targetIdentifier: number;

@@ -37,6 +37,11 @@ import {
   ScheduleType,
 } from '../types';
 
+const MONITOR_TYPE_OPTIONS: RadioOption<string>[] = [
+  [MonitorType.CRON_JOB, t('Cron Job')],
+  [MonitorType.UPTIME, t('Uptime Monitor')],
+];
+
 const SCHEDULE_OPTIONS: RadioOption<string>[] = [
   [ScheduleType.CRONTAB, t('Crontab')],
   [ScheduleType.INTERVAL, t('Interval')],
@@ -224,6 +229,7 @@ function MonitorForm({
               name: monitor.name,
               slug: monitor.slug,
               type: monitor.type ?? DEFAULT_MONITOR_TYPE,
+              url: monitor.url ?? null,
               project: monitor.project.slug,
               'alertRule.targets': alertRuleTarget,
               'alertRule.environment': monitor.alertRule?.environment,
@@ -271,6 +277,22 @@ function MonitorForm({
             disabled={!!monitor}
             disabledReason={t('Existing monitors cannot be moved between projects')}
             valueIsSlug
+            required
+            stacked
+            inline={false}
+          />
+        </InputGroup>
+
+        <StyledListItem>{t('Choose your monitor type')}</StyledListItem>
+        <ListItemSubText>
+          {t('You can monitor a cron job or uptime for a given URL.')}
+        </ListItemSubText>
+        <InputGroup>
+          <RadioField
+            name="type"
+            choices={MONITOR_TYPE_OPTIONS}
+            defaultValue={MonitorType.CRON_JOB}
+            orientInline
             required
             stacked
             inline={false}
@@ -370,32 +392,63 @@ function MonitorForm({
             }}
           </Observer>
         </InputGroup>
-        <StyledListItem>{t('Set a missed status')}</StyledListItem>
-        <ListItemSubText>
-          {t("The number of minutes we'll wait before we consider a check-in as missed.")}
-        </ListItemSubText>
-        <InputGroup>
-          <StyledNumberField
-            name="config.checkin_margin"
-            placeholder="Defaults to 0 minutes"
-            stacked
-            inline={false}
-          />
-        </InputGroup>
-        <StyledListItem>{t('Set a failed status')}</StyledListItem>
-        <ListItemSubText>
-          {t(
-            "The number of minutes a check-in is allowed to run before it's considered failed."
-          )}
-        </ListItemSubText>
-        <InputGroup>
-          <StyledNumberField
-            name="config.max_runtime"
-            placeholder={`Defaults to ${DEFAULT_MAX_RUNTIME} minutes`}
-            stacked
-            inline={false}
-          />
-        </InputGroup>
+        <Observer>
+          {() => {
+            const monitorType = form.current.getValue('type') ?? 'cron_job';
+            if (monitorType.toString() === 'cron_job') {
+              return (
+                <Fragment>
+                  <StyledListItem>{t('Set a missed status')}</StyledListItem>
+                  <ListItemSubText>
+                    {t(
+                      "The number of minutes we'll wait before we consider a check-in as missed."
+                    )}
+                  </ListItemSubText>
+                  <InputGroup>
+                    <StyledNumberField
+                      name="config.checkin_margin"
+                      placeholder="Defaults to 0 minutes"
+                      stacked
+                      inline={false}
+                    />
+                  </InputGroup>
+                  <StyledListItem>{t('Set a failed status')}</StyledListItem>
+                  <ListItemSubText>
+                    {t(
+                      "The number of minutes a check-in is allowed to run before it's considered failed."
+                    )}
+                  </ListItemSubText>
+                  <InputGroup>
+                    <StyledNumberField
+                      name="config.max_runtime"
+                      placeholder={`Defaults to ${DEFAULT_MAX_RUNTIME} minutes`}
+                      stacked
+                      inline={false}
+                    />
+                  </InputGroup>
+                </Fragment>
+              );
+            }
+            if (monitorType === 'uptime') {
+              return (
+                <Fragment>
+                  <StyledListItem>{t('URL')}</StyledListItem>
+                  <ListItemSubText>{t('The domain for us to ping.')}</ListItemSubText>
+                  <InputGroup>
+                    <StyledTextField
+                      name="url"
+                      placeholder={t('https://www.example.com')}
+                      required
+                      stacked
+                      inline={false}
+                    />
+                  </InputGroup>
+                </Fragment>
+              );
+            }
+            return null;
+          }}
+        </Observer>
         <Fragment>
           <StyledListItem>{t('Notify members')}</StyledListItem>
           <ListItemSubText>

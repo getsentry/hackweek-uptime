@@ -18,6 +18,7 @@ import {
   Monitor,
   MonitorEnvironment,
   MonitorStatus,
+  MonitorType,
   ScheduleType,
 } from 'sentry/views/monitors/types';
 import {scheduleAsText} from 'sentry/views/monitors/utils';
@@ -98,6 +99,7 @@ export default function DetailsSidebar({monitorEnv, monitor}: Props) {
       </Thresholds>
       <SectionHeading>{t('Cron Details')}</SectionHeading>
       <KeyValueTable>
+        <KeyValueTableRow keyName={t('Type')} value={monitor.type} />
         <KeyValueTableRow keyName={t('Monitor Slug')} value={slug} />
         {schedule_type === ScheduleType.CRONTAB && (
           <KeyValueTableRow keyName={t('Timezone')} value={timezone} />
@@ -106,6 +108,9 @@ export default function DetailsSidebar({monitorEnv, monitor}: Props) {
           keyName={t('Date created')}
           value={getFormattedDate(monitor.dateCreated, 'MMM D, YYYY')}
         />
+        {monitor.type === MonitorType.UPTIME && (
+          <KeyValueTableRow keyName={t('URL')} value={monitor.url} />
+        )}
       </KeyValueTable>
     </React.Fragment>
   );

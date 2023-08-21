@@ -206,6 +206,7 @@ class OrganizationMonitorIndexEndpoint(OrganizationEndpoint):
                 status=result["status"],
                 type=result["type"],
                 config=result["config"],
+                url=result.get("url"),
             )
         except MonitorLimitsExceeded as e:
             return self.respond({type(e).__name__: str(e)}, status=403)
@@ -229,5 +230,11 @@ class OrganizationMonitorIndexEndpoint(OrganizationEndpoint):
                 config = monitor.config
                 config["alert_rule_id"] = alert_rule_id
                 monitor.update(config=config)
+
+        monitor_environment = MonitorEnvironment.objects.ensure_environment(
+            project, monitor, environment_name="production"
+        )
+        next_checkin = monitor.get_next_expected_checkin(monitor.date_added)
+        monitor_environment.update(next_checkin=next_checkin, next_checkin_latest=next_checkin)
 
         return self.respond(serialize(monitor, request.user), status=201)

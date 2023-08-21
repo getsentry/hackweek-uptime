@@ -1,7 +1,9 @@
 import logging
+import uuid
 from datetime import datetime
 
 import msgpack
+import requests
 import sentry_sdk
 from arroyo import Topic
 from arroyo.backends.kafka import KafkaPayload, KafkaProducer, build_kafka_configuration
@@ -11,10 +13,10 @@ from django.utils import timezone
 from sentry.constants import ObjectStatus
 from sentry.monitors.constants import SUBTITLE_DATETIME_FORMAT, TIMEOUT
 from sentry.monitors.logic.mark_failed import MonitorFailure, mark_failed
-from sentry.monitors.types import ClockPulseMessage
+from sentry.monitors.types import CheckinMessage, ClockPulseMessage
 from sentry.silo import SiloMode
 from sentry.tasks.base import instrumented_task
-from sentry.utils import metrics, redis
+from sentry.utils import json, metrics, redis
 from sentry.utils.arroyo_producer import SingletonProducer
 from sentry.utils.kafka_config import get_kafka_producer_cluster_options, get_topic_definition
 
@@ -67,6 +69,7 @@ def _dispatch_tasks(ts: datetime):
     """
     check_missing.delay(current_datetime=ts)
     check_timeout.delay(current_datetime=ts)
+    check_uptime.delay(current_datetime=ts)
 
 
 def try_monitor_tasks_trigger(ts: datetime):
@@ -294,3 +297,86 @@ def check_timeout(current_datetime=None):
     ).count()
     if backlog_count:
         logger.exception(f"Exception in check_monitors - backlog count {backlog_count} is > 0")
+
+
+@instrumented_task(
+    name="sentry.monitors.tasks.check_uptime",
+    time_limit=15,
+    soft_time_limit=10,
+    silo_mode=SiloMode.REGION,
+)
+def check_uptime(current_datetime=None):
+    if current_datetime is None:
+        current_datetime = timezone.now()
+
+    current_datetime = current_datetime.replace(second=0, microsecond=0)
+
+    qs = (
+        MonitorEnvironment.objects.filter(
+            monitor__type__in=[MonitorType.UPTIME],
+            next_checkin__lte=current_datetime,
+        )
+        .exclude(
+            status__in=[
+                MonitorStatus.DISABLED,
+                MonitorStatus.PENDING_DELETION,
+                MonitorStatus.DELETION_IN_PROGRESS,
+            ]
+        )
+        .exclude(
+            monitor__status__in=[
+                ObjectStatus.DISABLED,
+                ObjectStatus.PENDING_DELETION,
+                ObjectStatus.DELETION_IN_PROGRESS,
+            ]
+        )[:MONITOR_LIMIT]
+    )
+    metrics.gauge("sentry.monitors.tasks.check_uptime.count", qs.count())
+    for monitor_environment in qs:
+        try:
+            check_url_uptime.delay(monitor_environment, current_datetime)
+        except Exception:
+            logger.exception("Exception in check_monitors - check uptime", exc_info=True)
+
+
+@instrumented_task(
+    name="sentry.monitors.tasks.check_url_uptime",
+    time_limit=30,
+    silo_mode=SiloMode.REGION,
+)
+def check_url_uptime(monitor_environment, current_datetime):
+    url = monitor_environment.monitor.url
+    if not url:
+        return
+
+    try:
+        request = requests.get(url)
+        status_code = request.status_code
+        status = "unknown"
+        if 200 <= status_code <= 299:
+            status = "ok"
+        elif status_code == 408:
+            status = "timeout"
+        else:
+            status = "error"
+
+        payload = {
+            "check_in_id": uuid.uuid4().hex,
+            "monitor_slug": monitor_environment.monitor.slug,
+            "status": status,
+            "status_code": status_code,
+            "environment": monitor_environment.environment.name,
+        }
+
+        message: CheckinMessage = {
+            "payload": json.dumps(payload),
+            "start_time": current_datetime.timestamp(),
+            "sdk": "uptime/1.0",
+            "project_id": monitor_environment.monitor.project_id,
+        }
+
+        # Produce the pulse into the topic
+        payload = KafkaPayload(None, msgpack.packb(message), [])
+        _checkin_producer.produce(Topic(settings.KAFKA_INGEST_MONITORS), payload)
+    except Exception:
+        logger.exception("Exception in check_monitors - check url uptime")

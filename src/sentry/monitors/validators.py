@@ -20,7 +20,7 @@ from sentry.monitors.models import (
     ScheduleType,
 )
 
-MONITOR_TYPES = {"cron_job": MonitorType.CRON_JOB}
+MONITOR_TYPES = {"cron_job": MonitorType.CRON_JOB, "uptime": MonitorType.UPTIME}
 
 MONITOR_STATUSES = {
     "active": ObjectStatus.ACTIVE,
@@ -210,6 +210,7 @@ class MonitorValidator(CamelSnakeSerializer):
         default="active",
     )
     type = serializers.ChoiceField(choices=list(zip(MONITOR_TYPES.keys(), MONITOR_TYPES.keys())))
+    url = serializers.URLField()
     config = ConfigValidator()
     alert_rule = MonitorAlertRuleValidator(required=False)
 
@@ -258,6 +259,9 @@ class MonitorCheckInValidator(serializers.Serializer):
             ("error", CheckInStatus.ERROR),
             ("in_progress", CheckInStatus.IN_PROGRESS),
         )
+    )
+    status_code = EmptyIntegerField(
+        required=False,
     )
     duration = EmptyIntegerField(
         required=False,

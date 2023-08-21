@@ -175,17 +175,13 @@ class CheckInStatus:
 
 
 class MonitorType:
-    # In the future we may have other types of monitors such as health check
-    # monitors. But for now we just have CRON_JOB style monitors.
     UNKNOWN = 0
     CRON_JOB = 3
+    UPTIME = 6
 
     @classmethod
     def as_choices(cls):
-        return (
-            (cls.UNKNOWN, "unknown"),
-            (cls.CRON_JOB, "cron_job"),
-        )
+        return ((cls.UNKNOWN, "unknown"), (cls.CRON_JOB, "cron_job"), (cls.UPTIME, "uptime"))
 
     @classmethod
     def get_name(cls, value):
@@ -223,6 +219,7 @@ class Monitor(Model):
         choices=[(k, str(v)) for k, v in MonitorType.as_choices()],
     )
     config: models.Field[dict[str, Any], dict[str, Any]] = JSONField(default=dict)
+    url = models.URLField(null=True)
     date_added = models.DateTimeField(default=timezone.now)
 
     class Meta:
@@ -422,6 +419,8 @@ class MonitorCheckIn(Model):
 
     attachment_id = BoundedBigIntegerField(null=True)
     config = JSONField(default=dict)
+
+    status_code = BoundedBigIntegerField(null=True)
 
     objects = BaseManager(cache_fields=("guid",))
 

@@ -101,6 +101,7 @@ class MonitorSerializer(Serializer):
             "dateCreated": obj.date_added,
             "project": attrs["project"],
             "environments": attrs["environments"],
+            "url": obj.url,
         }
 
         if self._expand("alertRule"):
@@ -171,6 +172,7 @@ class MonitorCheckInSerializer(Serializer):
             if obj.monitor_environment
             else None,
             "status": obj.get_status_display(),
+            "status_code": obj.status_code,
             "duration": obj.duration,
             "dateCreated": obj.date_added,
             "attachmentId": obj.attachment_id,
@@ -194,6 +196,7 @@ class MonitorCheckInSerializerResponse(TypedDict):
     id: str
     environment: str
     status: str
+    status_code: int
     duration: int
     dateCreated: datetime
     attachmentId: str

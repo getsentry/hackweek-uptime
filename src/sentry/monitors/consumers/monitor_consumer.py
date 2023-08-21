@@ -470,6 +470,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                         defaults={
                             "duration": duration,
                             "status": status,
+                            "status_code": validated_params.get("status_code"),
                             "date_added": date_added,
                             "date_updated": start_time,
                             "expected_time": expected_time,
