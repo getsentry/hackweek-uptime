@@ -34,3 +34,4 @@ class CheckinPayload(TypedDict):
     duration: NotRequired[int]
     monitor_config: NotRequired[Dict]
     contexts: NotRequired[CheckinContexts]
+    attachment_id: NotRequired[int]

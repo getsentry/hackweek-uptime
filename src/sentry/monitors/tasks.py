@@ -362,6 +362,16 @@ def check_url_uptime(monitor_environment, current_datetime):
         else:
             status = "error"
 
+        # upload file
+        headers = {"Content-Type": response.headers["content-type"]}
+
+        file = File.objects.create(
+            name=f"response-{current_datetime}-{url.replace('.', '_')}",
+            type="checkin.attachment",
+            headers=headers,
+        )
+        file.putfile(io.BytesIO(response.content))
+
         guid = uuid.uuid4()
         payload = {
             "check_in_id": guid.hex,
@@ -369,6 +379,7 @@ def check_url_uptime(monitor_environment, current_datetime):
             "status": status,
             "status_code": status_code,
             "environment": monitor_environment.environment.name,
+            "attachment_id": file.id,
         }
         message: CheckinMessage = {
             "payload": json.dumps(payload),
@@ -377,33 +388,7 @@ def check_url_uptime(monitor_environment, current_datetime):
             "project_id": monitor_environment.monitor.project_id,
         }
 
-        # Produce the pulse into the topic
         payload = KafkaPayload(None, msgpack.packb(message), [])
         _checkin_producer.produce(Topic(settings.KAFKA_INGEST_MONITORS), payload)
-
-        upload_response_attachment.s(guid, response).apply_async(countdown=5)
     except Exception:
         logger.exception("Exception in check_monitors - check url uptime")
-
-
-@instrumented_task(
-    name="sentry.monitors.tasks.upload_response_attachment",
-    time_limit=30,
-    silo_mode=SiloMode.REGION,
-)
-def upload_response_attachment(guid, response):
-    try:
-        checkin = MonitorCheckIn.objects.get(guid=guid)
-        if checkin.attachment_id:
-            return
-
-        headers = {"Content-Type": response.headers["content-type"]}
-
-        file = File.objects.create(
-            name=f"response-{checkin.date_added}.html", type="checkin.attachment", headers=headers
-        )
-        file.putfile(io.BytesIO(response.content))
-
-        checkin.update(attachment_id=file.id)
-    except MonitorCheckIn.DoesNotExist:
-        pass

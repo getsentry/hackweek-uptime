@@ -272,6 +272,7 @@ class MonitorCheckInValidator(serializers.Serializer):
     environment = serializers.CharField(required=False, allow_null=True)
     monitor_config = ConfigValidator(required=False)
     contexts = ContextsValidator(required=False, allow_null=True)
+    attachment_id = EmptyIntegerField(required=False)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

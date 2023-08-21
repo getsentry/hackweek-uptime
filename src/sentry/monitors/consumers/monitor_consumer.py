@@ -477,6 +477,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                             "timeout_at": timeout_at,
                             "monitor_config": monitor_config,
                             "trace_id": trace_id,
+                            "attachment_id": validated_params.get("attachment_id"),
                         },
                         project_id=project_id,
                         monitor=monitor,
