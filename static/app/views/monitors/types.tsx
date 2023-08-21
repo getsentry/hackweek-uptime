@@ -112,6 +112,7 @@ export interface CheckIn {
   duration: number;
   id: string;
   status: CheckInStatus;
+  status_code: number;
   attachmentId?: number;
   groups?: {id: number; shortId: string}[];
 }

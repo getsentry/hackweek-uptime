@@ -1,3 +1,4 @@
+import io
 import logging
 import uuid
 from datetime import datetime
@@ -11,6 +12,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from sentry.constants import ObjectStatus
+from sentry.models import File
 from sentry.monitors.constants import SUBTITLE_DATETIME_FORMAT, TIMEOUT
 from sentry.monitors.logic.mark_failed import MonitorFailure, mark_failed
 from sentry.monitors.types import CheckinMessage, ClockPulseMessage
@@ -350,8 +352,8 @@ def check_url_uptime(monitor_environment, current_datetime):
         return
 
     try:
-        request = requests.get(url)
-        status_code = request.status_code
+        response = requests.get(url)
+        status_code = response.status_code
         status = "unknown"
         if 200 <= status_code <= 299:
             status = "ok"
@@ -360,14 +362,14 @@ def check_url_uptime(monitor_environment, current_datetime):
         else:
             status = "error"
 
+        guid = uuid.uuid4()
         payload = {
-            "check_in_id": uuid.uuid4().hex,
+            "check_in_id": guid.hex,
             "monitor_slug": monitor_environment.monitor.slug,
             "status": status,
             "status_code": status_code,
             "environment": monitor_environment.environment.name,
         }
-
         message: CheckinMessage = {
             "payload": json.dumps(payload),
             "start_time": current_datetime.timestamp(),
@@ -378,5 +380,30 @@ def check_url_uptime(monitor_environment, current_datetime):
         # Produce the pulse into the topic
         payload = KafkaPayload(None, msgpack.packb(message), [])
         _checkin_producer.produce(Topic(settings.KAFKA_INGEST_MONITORS), payload)
+
+        upload_response_attachment.s(guid, response).apply_async(countdown=5)
     except Exception:
         logger.exception("Exception in check_monitors - check url uptime")
+
+
+@instrumented_task(
+    name="sentry.monitors.tasks.upload_response_attachment",
+    time_limit=30,
+    silo_mode=SiloMode.REGION,
+)
+def upload_response_attachment(guid, response):
+    try:
+        checkin = MonitorCheckIn.objects.get(guid=guid)
+        if checkin.attachment_id:
+            return
+
+        headers = {"Content-Type": response.headers["content-type"]}
+
+        file = File.objects.create(
+            name=f"response-{checkin.date_added}.html", type="checkin.attachment", headers=headers
+        )
+        file.putfile(io.BytesIO(response.content))
+
+        checkin.update(attachment_id=file.id)
+    except MonitorCheckIn.DoesNotExist:
+        pass

@@ -85,6 +85,7 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
       <PanelTable
         headers={[
           t('Status'),
+          t('Status Code'),
           t('Started'),
           t('Duration'),
           t('Issues'),
@@ -109,6 +110,7 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
                   />
                   <Text>{statusToText[checkIn.status]}</Text>
                 </Status>
+                <Text>{checkIn.status_code}</Text>
                 {checkIn.status !== CheckInStatus.MISSED ? (
                   <div>
                     {monitor.config.timezone ? (

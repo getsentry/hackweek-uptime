@@ -129,6 +129,8 @@ class OrganizationMonitorDetailsEndpoint(MonitorEndpoint):
                     params["config"] = monitor.config
 
                 params["config"]["alert_rule_id"] = alert_rule_id
+        if "url" in result:
+            params["url"] = result["url"]
 
         if params:
             monitor.update(**params)
