@@ -18,7 +18,7 @@ import {useApiQuery} from 'sentry/utils/queryClient';
 import theme from 'sentry/utils/theme';
 import usePageFilters from 'sentry/utils/usePageFilters';
 
-import {Monitor, MonitorEnvironment, MonitorStat, MonitorType} from '../types';
+import {Monitor, MonitorEnvironment, MonitorStat} from '../types';
 
 type Props = {
   monitor: Monitor;
@@ -146,35 +146,33 @@ function MonitorStats({monitor, monitorEnvs, orgSlug}: Props) {
           )}
         </PanelBody>
       </Panel>
-      {monitor.type === MonitorType.CRON_JOB ? (
-        <Panel>
-          <PanelBody withPadding>
-            <StyledHeaderTitle>{t('Average Duration')}</StyledHeaderTitle>
-            {isLoading ? (
-              <Placeholder height={`${height}px`} />
-            ) : (
-              <AreaChart
-                isGroupedByDate
-                showTimeInTooltip
-                useShortDate
-                series={[duration]}
-                height={height}
-                colors={[theme.charts.colors[0]]}
-                yAxis={getYAxisOptions('duration')}
-                grid={{
-                  top: 6,
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                }}
-                tooltip={{
-                  valueFormatter: value => tooltipFormatter(value, 'duration'),
-                }}
-              />
-            )}
-          </PanelBody>
-        </Panel>
-      ) : null}
+      <Panel>
+        <PanelBody withPadding>
+          <StyledHeaderTitle>{t('Average Duration')}</StyledHeaderTitle>
+          {isLoading ? (
+            <Placeholder height={`${height}px`} />
+          ) : (
+            <AreaChart
+              isGroupedByDate
+              showTimeInTooltip
+              useShortDate
+              series={[duration]}
+              height={height}
+              colors={[theme.charts.colors[0]]}
+              yAxis={getYAxisOptions('duration')}
+              grid={{
+                top: 6,
+                bottom: 0,
+                left: 0,
+                right: 0,
+              }}
+              tooltip={{
+                valueFormatter: value => tooltipFormatter(value, 'duration'),
+              }}
+            />
+          )}
+        </PanelBody>
+      </Panel>
     </React.Fragment>
   );
 }

@@ -186,7 +186,13 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
         </PanelTable>
       ) : (
         <PanelTable
-          headers={[t('Status'), t('Status Code'), t('Attachment'), t('Timestamp')]}
+          headers={[
+            t('Status'),
+            t('Status Code'),
+            t('Duration'),
+            t('Attachment'),
+            t('Timestamp'),
+          ]}
         >
           {isLoading
             ? [...new Array(6)].map((_, i) => (
@@ -206,6 +212,11 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
                     <Text>{statusToText[checkIn.status]}</Text>
                   </Status>
                   <Text>{checkIn.status_code}</Text>
+                  {defined(checkIn.duration) ? (
+                    <Duration seconds={checkIn.duration / 1000} />
+                  ) : (
+                    emptyCell
+                  )}
                   {checkIn.attachmentId ? (
                     <Button
                       size="xs"

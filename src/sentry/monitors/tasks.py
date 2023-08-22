@@ -378,6 +378,7 @@ def check_url_uptime(monitor_environment, current_datetime):
             "monitor_slug": monitor_environment.monitor.slug,
             "status": status,
             "status_code": status_code,
+            "duration": response.elapsed.total_seconds(),
             "environment": monitor_environment.environment.name,
             "attachment_id": file.id,
         }
