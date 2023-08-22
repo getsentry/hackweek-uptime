@@ -35,6 +35,7 @@ import {
   MonitorConfig,
   MonitorType,
   ScheduleType,
+  UptimeType,
 } from '../types';
 
 const MONITOR_TYPE_OPTIONS: RadioOption<string>[] = [
@@ -45,6 +46,12 @@ const MONITOR_TYPE_OPTIONS: RadioOption<string>[] = [
 const SCHEDULE_OPTIONS: RadioOption<string>[] = [
   [ScheduleType.CRONTAB, t('Crontab')],
   [ScheduleType.INTERVAL, t('Interval')],
+];
+
+const UPTIME_TYPE_OPTIONS: RadioOption<string>[] = [
+  [UptimeType.GET, t('HTTP GET')],
+  [UptimeType.PING, t('ICMP Ping')],
+  [UptimeType.SSL, t('SSL domain check')],
 ];
 
 const DEFAULT_MONITOR_TYPE = 'cron_job';
@@ -178,6 +185,7 @@ function MonitorForm({
         rv['config.schedule_type'] = config.schedule_type;
         rv['config.checkin_margin'] = config.checkin_margin;
         rv['config.max_runtime'] = config.max_runtime;
+        rv['config.uptime_type'] = config.uptime_type;
 
         switch (config.schedule_type) {
           case 'interval':
@@ -438,6 +446,21 @@ function MonitorForm({
                     <StyledTextField
                       name="url"
                       placeholder={t('https://www.example.com')}
+                      required
+                      stacked
+                      inline={false}
+                    />
+                  </InputGroup>
+                  <StyledListItem>{t('Request Method')}</StyledListItem>
+                  <ListItemSubText>
+                    {t('The type of request to use for the domain.')}
+                  </ListItemSubText>
+                  <InputGroup>
+                    <RadioField
+                      name="config.uptime_type"
+                      choices={UPTIME_TYPE_OPTIONS}
+                      defaultValue={UptimeType.GET}
+                      orientInline
                       required
                       stacked
                       inline={false}

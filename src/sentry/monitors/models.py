@@ -57,10 +57,11 @@ MONITOR_CONFIG = {
         "alert_rule_id": {"type": ["integer", "null"]},
         "failure_issue_threshold": {"type": ["integer", "null"]},
         "recovery_threshold": {"type": ["integer", "null"]},
+        "uptime_type": {"type": ["string", "null"]},
     },
     # TODO(davidenwang): Old monitors may not have timezone or schedule_type, these should be added here once we've cleaned up old data
     "required": ["checkin_margin", "max_runtime", "schedule"],
-    "additionalProperties": False,
+    "additionalProperties": True,
 }
 
 MAX_SLUG_LENGTH = 50
@@ -196,6 +197,20 @@ class ScheduleType:
     @classmethod
     def as_choices(cls):
         return ((cls.UNKNOWN, "unknown"), (cls.CRONTAB, "crontab"), (cls.INTERVAL, "interval"))
+
+    @classmethod
+    def get_name(cls, value):
+        return dict(cls.as_choices())[value]
+
+
+class UptimeType:
+    GET = 0
+    PING = 3
+    SSL = 6
+
+    @classmethod
+    def as_choices(cls):
+        return ((cls.GET, "get"), (cls.PING, "ping"), (cls.SSL, "ssl"))
 
     @classmethod
     def get_name(cls, value):

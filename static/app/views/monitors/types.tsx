@@ -19,6 +19,12 @@ export enum ScheduleType {
   INTERVAL = 'interval',
 }
 
+export enum UptimeType {
+  GET = 'get',
+  PING = 'ping',
+  SSL = 'ssl',
+}
+
 export enum MonitorStatus {
   OK = 'ok',
   ERROR = 'error',
@@ -40,6 +46,7 @@ interface BaseConfig {
   checkin_margin: number;
   max_runtime: number;
   timezone: string;
+  uptime_type: string;
   alert_rule_id?: number;
 }
 

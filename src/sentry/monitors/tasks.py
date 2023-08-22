@@ -1,15 +1,18 @@
 import io
 import logging
+import ssl
 import uuid
 from datetime import datetime
 
 import msgpack
+import OpenSSL
 import requests
 import sentry_sdk
 from arroyo import Topic
 from arroyo.backends.kafka import KafkaPayload, KafkaProducer, build_kafka_configuration
 from django.conf import settings
 from django.utils import timezone
+from icmplib import ping
 
 from sentry.constants import ObjectStatus
 from sentry.models import File
@@ -351,44 +354,105 @@ def check_url_uptime(monitor_environment, current_datetime):
     if not url:
         return
 
+    uptime_type = monitor_environment.monitor.config.get("uptime_type", "get")
     try:
-        response = requests.get(url)
-        status_code = response.status_code
-        status = "unknown"
-        if 200 <= status_code <= 299:
-            status = "ok"
-        elif status_code == 408:
-            status = "timeout"
-        else:
-            status = "error"
+        if uptime_type == "get":
+            response = requests.get(url)
+            status_code = response.status_code
+            status = "unknown"
+            if 200 <= status_code <= 299:
+                status = "ok"
+            elif status_code == 408:
+                status = "timeout"
+            else:
+                status = "error"
 
-        # upload file
-        headers = {"Content-Type": response.headers["content-type"]}
+            # upload file
+            headers = {"Content-Type": response.headers["content-type"]}
 
-        file = File.objects.create(
-            name=f"response-{current_datetime}-{url.replace('.', '_')}",
-            type="checkin.attachment",
-            headers=headers,
-        )
-        file.putfile(io.BytesIO(response.content))
+            file = File.objects.create(
+                name=f"response-{current_datetime}-{url.replace('.', '_')}",
+                type="checkin.attachment",
+                headers=headers,
+            )
+            file.putfile(io.BytesIO(response.content))
 
-        guid = uuid.uuid4()
-        payload = {
-            "check_in_id": guid.hex,
-            "monitor_slug": monitor_environment.monitor.slug,
-            "status": status,
-            "status_code": status_code,
-            "duration": response.elapsed.total_seconds(),
-            "environment": monitor_environment.environment.name,
-            "attachment_id": file.id,
-        }
-        message: CheckinMessage = {
-            "payload": json.dumps(payload),
-            "start_time": current_datetime.timestamp(),
-            "sdk": "uptime/1.0",
-            "project_id": monitor_environment.monitor.project_id,
-        }
+            guid = uuid.uuid4()
+            payload = {
+                "check_in_id": guid.hex,
+                "monitor_slug": monitor_environment.monitor.slug,
+                "status": status,
+                "status_code": status_code,
+                "duration": response.elapsed.total_seconds(),
+                "environment": monitor_environment.environment.name,
+                "attachment_id": file.id,
+            }
+            message: CheckinMessage = {
+                "payload": json.dumps(payload),
+                "start_time": current_datetime.timestamp(),
+                "sdk": "uptime/1.0",
+                "project_id": monitor_environment.monitor.project_id,
+            }
+        elif uptime_type == "ping":
+            host = ping(url, privileged=False)
+            status = "unknown"
+            if host.packet_loss == 0.0:
+                status = "ok"
+            else:
+                status = "error"
 
+            duration = host.avg_rtt / 1000
+            guid = uuid.uuid4()
+            payload = {
+                "check_in_id": guid.hex,
+                "monitor_slug": monitor_environment.monitor.slug,
+                "status": status,
+                "status_code": (1.0 - host.packet_loss) * 100,
+                "duration": duration,
+                "environment": monitor_environment.environment.name,
+            }
+            message: CheckinMessage = {
+                "payload": json.dumps(payload),
+                "start_time": current_datetime.timestamp(),
+                "sdk": "uptime/1.0",
+                "project_id": monitor_environment.monitor.project_id,
+            }
+        elif uptime_type == "ssl":
+            cert = ssl.get_server_certificate((url, 443))
+            x509 = OpenSSL.crypto.load_certificate(OpenSSL.crypto.FILETYPE_PEM, cert)
+            expiry = datetime.strptime(
+                x509.get_notAfter().decode("ascii"), "%Y%m%d%H%M%SZ"
+            ).replace(tzinfo=timezone.utc)
+            now = timezone.now()
+            difference = expiry - now
+            status = "unknown"
+            if difference.total_seconds() > 0.0:
+                status = "ok"
+            else:
+                status = "error"
+
+            # upload file
+            file = File.objects.create(
+                name=f"response-{current_datetime}-{url.replace('.', '_')}",
+                type="checkin.attachment",
+            )
+            file.putfile(io.BytesIO(cert.encode("utf-8")))
+
+            guid = uuid.uuid4()
+            payload = {
+                "check_in_id": guid.hex,
+                "monitor_slug": monitor_environment.monitor.slug,
+                "status": status,
+                "status_code": int(difference.total_seconds()),
+                "environment": monitor_environment.environment.name,
+                "attachment_id": file.id,
+            }
+            message: CheckinMessage = {
+                "payload": json.dumps(payload),
+                "start_time": current_datetime.timestamp(),
+                "sdk": "uptime/1.0",
+                "project_id": monitor_environment.monitor.project_id,
+            }
         payload = KafkaPayload(None, msgpack.packb(message), [])
         _checkin_producer.produce(Topic(settings.KAFKA_INGEST_MONITORS), payload)
     except Exception:

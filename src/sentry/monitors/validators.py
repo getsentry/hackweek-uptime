@@ -18,6 +18,7 @@ from sentry.monitors.models import (
     Monitor,
     MonitorType,
     ScheduleType,
+    UptimeType,
 )
 
 MONITOR_TYPES = {"cron_job": MonitorType.CRON_JOB, "uptime": MonitorType.UPTIME}
@@ -30,6 +31,12 @@ MONITOR_STATUSES = {
 SCHEDULE_TYPES = {
     "crontab": ScheduleType.CRONTAB,
     "interval": ScheduleType.INTERVAL,
+}
+
+UPTIME_TYPES = {
+    "get": UptimeType.GET,
+    "ping": UptimeType.PING,
+    "ssl": UptimeType.SSL,
 }
 
 INTERVAL_NAMES = ("year", "month", "week", "day", "hour", "minute")
@@ -124,6 +131,11 @@ class ConfigValidator(serializers.Serializer):
         min_value=1,
     )
 
+    uptime_type = serializers.ChoiceField(
+        choices=list(zip(UPTIME_TYPES.keys(), UPTIME_TYPES.keys())),
+        required=False,
+    )
+
     def bind(self, *args, **kwargs):
         super().bind(*args, **kwargs)
         # Inherit instance data when used as a nested serializer
@@ -210,7 +222,7 @@ class MonitorValidator(CamelSnakeSerializer):
         default="active",
     )
     type = serializers.ChoiceField(choices=list(zip(MONITOR_TYPES.keys(), MONITOR_TYPES.keys())))
-    url = serializers.URLField()
+    url = serializers.CharField(allow_blank=False)
     config = ConfigValidator()
     alert_rule = MonitorAlertRuleValidator(required=False)
 
