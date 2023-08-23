@@ -423,10 +423,16 @@ def check_url_uptime(monitor_environment, current_datetime):
             expiry = datetime.strptime(
                 x509.get_notAfter().decode("ascii"), "%Y%m%d%H%M%SZ"
             ).replace(tzinfo=timezone.utc)
+
+            # check expiry
             now = timezone.now()
             difference = expiry - now
+
+            # check hostname
+            host_matches = url.endswith(x509.get_subject().CN)
+
             status = "unknown"
-            if difference.total_seconds() > 0.0:
+            if difference.total_seconds() > 0.0 and host_matches:
                 status = "ok"
             else:
                 status = "error"
