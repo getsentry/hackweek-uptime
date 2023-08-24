@@ -24,6 +24,7 @@ from sentry.monitors.logic.mark_failed import mark_failed
 from sentry.monitors.models import (
     MAX_SLUG_LENGTH,
     CheckInStatus,
+    HTTPCheckIn,
     Monitor,
     MonitorCheckIn,
     MonitorEnvironment,
@@ -31,6 +32,8 @@ from sentry.monitors.models import (
     MonitorEnvironmentValidationFailed,
     MonitorLimitsExceeded,
     MonitorType,
+    PingCheckIn,
+    SSLCheckIn,
 )
 from sentry.monitors.tasks import try_monitor_tasks_trigger
 from sentry.monitors.types import CheckinMessage, CheckinPayload, ClockPulseMessage
@@ -135,8 +138,9 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
     except Exception:
         logger.exception("Failed to trigger monitor tasks", exc_info=True)
 
+    message_type = wrapper["message_type"]
     # Nothing else to do with clock pulses
-    if wrapper["message_type"] == "clock_pulse":
+    if message_type == "clock_pulse":
         return
 
     with sentry_sdk.start_transaction(
@@ -317,6 +321,12 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                         else None
                     )
 
+                    params["expiration_date"] = (
+                        int(params["expiration_date"] * 1000)
+                        if params.get("expiration_date") is not None
+                        else None
+                    )
+
                     validator = MonitorCheckInValidator(
                         data=params,
                         partial=True,
@@ -409,47 +419,89 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                 status = getattr(CheckInStatus, validated_params["status"].upper())
                 trace_id = validated_params.get("contexts", {}).get("trace", {}).get("trace_id")
 
-                try:
-                    if use_latest_checkin:
-                        check_in = (
-                            MonitorCheckIn.objects.select_for_update()
-                            .filter(monitor_environment=monitor_environment)
-                            .exclude(status__in=CheckInStatus.FINISHED_VALUES)
-                            .order_by("-date_added")[:1]
-                            .get()
-                        )
-                    else:
-                        check_in = MonitorCheckIn.objects.select_for_update().get(
-                            guid=check_in_id,
-                        )
-
-                        if check_in.monitor_environment_id != monitor_environment.id:
-                            metrics.incr(
-                                "monitors.checkin.result",
-                                tags={
-                                    **metric_kwargs,
-                                    "status": "failed_monitor_environment_guid_match",
-                                },
+                if message_type == "check_in":
+                    try:
+                        if use_latest_checkin:
+                            check_in = (
+                                MonitorCheckIn.objects.select_for_update()
+                                .filter(monitor_environment=monitor_environment)
+                                .exclude(status__in=CheckInStatus.FINISHED_VALUES)
+                                .order_by("-date_added")[:1]
+                                .get()
                             )
-                            txn.set_tag("result", "failed_monitor_environment_guid_match")
-                            logger.info(
-                                "monitors.consumer.monitor_environment_mismatch",
-                                extra={
-                                    "guid": check_in_id.hex,
-                                    "slug": monitor_slug,
-                                    "organization_id": project.organization_id,
-                                    "environment": monitor_environment.id,
-                                    "payload_environment": check_in.monitor_environment_id,
-                                },
+                        else:
+                            check_in = MonitorCheckIn.objects.select_for_update().get(
+                                guid=check_in_id,
                             )
-                            return
 
-                    txn.set_tag("outcome", "process_existing_checkin")
-                    update_existing_check_in(
-                        check_in, status, validated_params["duration"], start_time
-                    )
+                            if check_in.monitor_environment_id != monitor_environment.id:
+                                metrics.incr(
+                                    "monitors.checkin.result",
+                                    tags={
+                                        **metric_kwargs,
+                                        "status": "failed_monitor_environment_guid_match",
+                                    },
+                                )
+                                txn.set_tag("result", "failed_monitor_environment_guid_match")
+                                logger.info(
+                                    "monitors.consumer.monitor_environment_mismatch",
+                                    extra={
+                                        "guid": check_in_id.hex,
+                                        "slug": monitor_slug,
+                                        "organization_id": project.organization_id,
+                                        "environment": monitor_environment.id,
+                                        "payload_environment": check_in.monitor_environment_id,
+                                    },
+                                )
+                                return
 
-                except MonitorCheckIn.DoesNotExist:
+                        txn.set_tag("outcome", "process_existing_checkin")
+                        update_existing_check_in(
+                            check_in, status, validated_params["duration"], start_time
+                        )
+
+                    except MonitorCheckIn.DoesNotExist:
+                        # Infer the original start time of the check-in from the duration.
+                        # Note that the clock of this worker may be off from what Relay is reporting.
+                        date_added = start_time
+                        duration = validated_params["duration"]
+                        if duration is not None:
+                            date_added -= timedelta(milliseconds=duration)
+
+                        expected_time = None
+                        if monitor_environment.last_checkin:
+                            expected_time = monitor.get_next_expected_checkin(
+                                monitor_environment.last_checkin
+                            )
+
+                        monitor_config = monitor.get_validated_config()
+                        timeout_at = get_timeout_at(monitor_config, status, date_added)
+
+                        check_in, created = MonitorCheckIn.objects.get_or_create(
+                            defaults={
+                                "duration": duration,
+                                "status": status,
+                                "status_code": validated_params.get("status_code"),
+                                "date_added": date_added,
+                                "date_updated": start_time,
+                                "expected_time": expected_time,
+                                "timeout_at": timeout_at,
+                                "monitor_config": monitor_config,
+                                "trace_id": trace_id,
+                                "attachment_id": validated_params.get("attachment_id"),
+                            },
+                            project_id=project_id,
+                            monitor=monitor,
+                            monitor_environment=monitor_environment,
+                            guid=guid,
+                        )
+                        if not created:
+                            txn.set_tag("outcome", "process_existing_checkin_race_condition")
+                            update_existing_check_in(check_in, status, duration, start_time)
+                        else:
+                            txn.set_tag("outcome", "create_new_checkin")
+                            signal_first_checkin(project, monitor)
+                elif message_type == "http_get":
                     # Infer the original start time of the check-in from the duration.
                     # Note that the clock of this worker may be off from what Relay is reporting.
                     date_added = start_time
@@ -466,7 +518,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                     monitor_config = monitor.get_validated_config()
                     timeout_at = get_timeout_at(monitor_config, status, date_added)
 
-                    check_in, created = MonitorCheckIn.objects.get_or_create(
+                    check_in, created = PingCheckIn.objects.get_or_create(
                         defaults={
                             "duration": duration,
                             "status": status,
@@ -476,7 +528,6 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                             "expected_time": expected_time,
                             "timeout_at": timeout_at,
                             "monitor_config": monitor_config,
-                            "trace_id": trace_id,
                             "attachment_id": validated_params.get("attachment_id"),
                         },
                         project_id=project_id,
@@ -484,12 +535,74 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                         monitor_environment=monitor_environment,
                         guid=guid,
                     )
-                    if not created:
-                        txn.set_tag("outcome", "process_existing_checkin_race_condition")
-                        update_existing_check_in(check_in, status, duration, start_time)
-                    else:
-                        txn.set_tag("outcome", "create_new_checkin")
-                        signal_first_checkin(project, monitor)
+                elif message_type == "ping":
+                    # Infer the original start time of the check-in from the duration.
+                    # Note that the clock of this worker may be off from what Relay is reporting.
+                    date_added = start_time
+                    duration = validated_params["duration"]
+                    if duration is not None:
+                        date_added -= timedelta(milliseconds=duration)
+
+                    expected_time = None
+                    if monitor_environment.last_checkin:
+                        expected_time = monitor.get_next_expected_checkin(
+                            monitor_environment.last_checkin
+                        )
+
+                    monitor_config = monitor.get_validated_config()
+                    timeout_at = get_timeout_at(monitor_config, status, date_added)
+
+                    check_in, created = HTTPCheckIn.objects.get_or_create(
+                        defaults={
+                            "duration": duration,
+                            "status": status,
+                            "date_added": date_added,
+                            "date_updated": start_time,
+                            "expected_time": expected_time,
+                            "timeout_at": timeout_at,
+                            "monitor_config": monitor_config,
+                            "packets_sent": validated_params.get("packets_sent"),
+                            "packets_received": validated_params.get("packets_received"),
+                        },
+                        project_id=project_id,
+                        monitor=monitor,
+                        monitor_environment=monitor_environment,
+                        guid=guid,
+                    )
+                elif message_type == "ssl":
+                    # Infer the original start time of the check-in from the duration.
+                    # Note that the clock of this worker may be off from what Relay is reporting.
+                    date_added = start_time
+                    duration = validated_params["duration"]
+                    if duration is not None:
+                        date_added -= timedelta(milliseconds=duration)
+
+                    expected_time = None
+                    if monitor_environment.last_checkin:
+                        expected_time = monitor.get_next_expected_checkin(
+                            monitor_environment.last_checkin
+                        )
+
+                    monitor_config = monitor.get_validated_config()
+                    timeout_at = get_timeout_at(monitor_config, status, date_added)
+
+                    check_in, created = SSLCheckIn.objects.get_or_create(
+                        defaults={
+                            "duration": duration,
+                            "status": status,
+                            "date_added": date_added,
+                            "date_updated": start_time,
+                            "expected_time": expected_time,
+                            "timeout_at": timeout_at,
+                            "monitor_config": monitor_config,
+                            "expiration_date": validated_params.get("expiration_date"),
+                            "attachment_id": validated_params.get("attachment_id"),
+                        },
+                        project_id=project_id,
+                        monitor=monitor,
+                        monitor_environment=monitor_environment,
+                        guid=guid,
+                    )
 
                 if check_in.status == CheckInStatus.ERROR:
                     mark_failed(

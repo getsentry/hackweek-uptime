@@ -6,7 +6,7 @@ from typing_extensions import NotRequired
 class CheckinMessage(TypedDict):
     # TODO(epurkhiser): We should make this required and ensure the message
     # produced by relay includes this message type
-    message_type: NotRequired[Literal["check_in"]]
+    message_type: NotRequired[Literal["check_in", "http_get", "ping", "ssl"]]
     payload: str
     start_time: float
     project_id: str
@@ -35,3 +35,6 @@ class CheckinPayload(TypedDict):
     monitor_config: NotRequired[Dict]
     contexts: NotRequired[CheckinContexts]
     attachment_id: NotRequired[int]
+    packets_received: NotRequired[int]
+    packets_sent: NotRequired[int]
+    expiration_date: NotRequired[float]

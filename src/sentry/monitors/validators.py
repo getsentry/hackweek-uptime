@@ -275,6 +275,15 @@ class MonitorCheckInValidator(serializers.Serializer):
     status_code = EmptyIntegerField(
         required=False,
     )
+    packets_sent = EmptyIntegerField(
+        required=False,
+    )
+    packets_received = EmptyIntegerField(
+        required=False,
+    )
+    expiration_date = EmptyIntegerField(
+        required=False,
+    )
     duration = EmptyIntegerField(
         required=False,
         allow_null=True,

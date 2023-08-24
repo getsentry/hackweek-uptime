@@ -388,6 +388,7 @@ def check_url_uptime(monitor_environment, current_datetime):
                 "attachment_id": file.id,
             }
             message: CheckinMessage = {
+                "message_type": "http_get",
                 "payload": json.dumps(payload),
                 "start_time": current_datetime.timestamp(),
                 "sdk": "uptime/1.0",
@@ -407,11 +408,13 @@ def check_url_uptime(monitor_environment, current_datetime):
                 "check_in_id": guid.hex,
                 "monitor_slug": monitor_environment.monitor.slug,
                 "status": status,
-                "status_code": (1.0 - host.packet_loss) * 100,
+                "packets_sent": host.packets_sent,
+                "packets_received": host.packets_received,
                 "duration": duration,
                 "environment": monitor_environment.environment.name,
             }
             message: CheckinMessage = {
+                "message_type": "ping",
                 "payload": json.dumps(payload),
                 "start_time": current_datetime.timestamp(),
                 "sdk": "uptime/1.0",
@@ -449,11 +452,12 @@ def check_url_uptime(monitor_environment, current_datetime):
                 "check_in_id": guid.hex,
                 "monitor_slug": monitor_environment.monitor.slug,
                 "status": status,
-                "status_code": int(difference.total_seconds()),
+                "expiration_date": difference.total_seconds(),
                 "environment": monitor_environment.environment.name,
                 "attachment_id": file.id,
             }
             message: CheckinMessage = {
+                "message_type": "ssl",
                 "payload": json.dumps(payload),
                 "start_time": current_datetime.timestamp(),
                 "sdk": "uptime/1.0",

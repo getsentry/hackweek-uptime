@@ -367,8 +367,7 @@ def check_organization_monitor_limits(sender, instance, **kwargs):
         )
 
 
-@region_silo_only_model
-class MonitorCheckIn(Model):
+class CheckIn(Model):
     __relocation_scope__ = RelocationScope.Excluded
 
     guid = UUIDField(unique=True, auto_add=True)
@@ -435,8 +434,12 @@ class MonitorCheckIn(Model):
     attachment_id = BoundedBigIntegerField(null=True)
     config = JSONField(default=dict)
 
-    status_code = BoundedBigIntegerField(null=True)
+    class Meta:
+        abstract = True
 
+
+@region_silo_only_model
+class MonitorCheckIn(CheckIn):
     objects = BaseManager(cache_fields=("guid",))
 
     class Meta:
@@ -462,6 +465,22 @@ class MonitorCheckIn(Model):
     # what we want to happen, so kill it here
     def _update_timestamps(self):
         pass
+
+
+@region_silo_only_model
+class HTTPCheckIn(CheckIn):
+    status_code = BoundedBigIntegerField(null=True)
+
+
+@region_silo_only_model
+class PingCheckIn(CheckIn):
+    packets_received = BoundedPositiveIntegerField(null=True)
+    packets_sent = BoundedPositiveIntegerField(null=True)
+
+
+@region_silo_only_model
+class SSLCheckIn(CheckIn):
+    expiration_date = models.DateTimeField(null=True)
 
 
 @region_silo_only_model
