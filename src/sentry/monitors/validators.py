@@ -283,6 +283,7 @@ class MonitorCheckInValidator(serializers.Serializer):
     )
     expiration_date = EmptyIntegerField(
         required=False,
+        allow_null=True,
     )
     duration = EmptyIntegerField(
         required=False,

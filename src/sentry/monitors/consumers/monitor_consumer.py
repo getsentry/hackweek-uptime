@@ -335,7 +335,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                         },
                     )
 
-                    if not validator.is_valid():
+                    if not validator.is_valid(raise_exception=True):
                         metrics.incr(
                             "monitors.checkin.result",
                             tags={**metric_kwargs, "status": "failed_checkin_validation"},
@@ -518,7 +518,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                     monitor_config = monitor.get_validated_config()
                     timeout_at = get_timeout_at(monitor_config, status, date_added)
 
-                    check_in, created = PingCheckIn.objects.get_or_create(
+                    check_in, created = HTTPCheckIn.objects.get_or_create(
                         defaults={
                             "duration": duration,
                             "status": status,
@@ -552,7 +552,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                     monitor_config = monitor.get_validated_config()
                     timeout_at = get_timeout_at(monitor_config, status, date_added)
 
-                    check_in, created = HTTPCheckIn.objects.get_or_create(
+                    check_in, created = PingCheckIn.objects.get_or_create(
                         defaults={
                             "duration": duration,
                             "status": status,
@@ -583,6 +583,10 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                             monitor_environment.last_checkin
                         )
 
+                    expiration_date = date_added + timedelta(
+                        milliseconds=validated_params.get("expiration_date")
+                    )
+
                     monitor_config = monitor.get_validated_config()
                     timeout_at = get_timeout_at(monitor_config, status, date_added)
 
@@ -595,7 +599,7 @@ def _process_message(ts: datetime, wrapper: CheckinMessage | ClockPulseMessage) 
                             "expected_time": expected_time,
                             "timeout_at": timeout_at,
                             "monitor_config": monitor_config,
-                            "expiration_date": validated_params.get("expiration_date"),
+                            "expiration_date": expiration_date,
                             "attachment_id": validated_params.get("attachment_id"),
                         },
                         project_id=project_id,

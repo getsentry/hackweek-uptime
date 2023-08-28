@@ -441,6 +441,7 @@ class CheckIn(Model):
 @region_silo_only_model
 class MonitorCheckIn(CheckIn):
     objects = BaseManager(cache_fields=("guid",))
+    status_code = BoundedBigIntegerField(null=True)
 
     class Meta:
         app_label = "sentry"
@@ -471,16 +472,28 @@ class MonitorCheckIn(CheckIn):
 class HTTPCheckIn(CheckIn):
     status_code = BoundedBigIntegerField(null=True)
 
+    class Meta:
+        app_label = "sentry"
+        db_table = "sentry_httpcheckin"
+
 
 @region_silo_only_model
 class PingCheckIn(CheckIn):
     packets_received = BoundedPositiveIntegerField(null=True)
     packets_sent = BoundedPositiveIntegerField(null=True)
 
+    class Meta:
+        app_label = "sentry"
+        db_table = "sentry_pingcheckin"
+
 
 @region_silo_only_model
 class SSLCheckIn(CheckIn):
     expiration_date = models.DateTimeField(null=True)
+
+    class Meta:
+        app_label = "sentry"
+        db_table = "sentry_sslcheckin"
 
 
 @region_silo_only_model

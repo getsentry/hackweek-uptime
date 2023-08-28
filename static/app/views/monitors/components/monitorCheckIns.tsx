@@ -189,6 +189,9 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
           headers={[
             t('Status'),
             t('Status Code'),
+            t('Packets Sent'),
+            t('Packets Received'),
+            t('Expiration Date'),
             t('Duration'),
             t('Attachment'),
             t('Timestamp'),
@@ -212,6 +215,9 @@ function MonitorCheckIns({monitor, monitorEnvs, orgSlug}: Props) {
                     <Text>{statusToText[checkIn.status]}</Text>
                   </Status>
                   <Text>{checkIn.status_code}</Text>
+                  <Text>{checkIn.packets_sent}</Text>
+                  <Text>{checkIn.packets_received}</Text>
+                  <Timestamp date={checkIn.expiration_date} />
                   {defined(checkIn.duration) ? (
                     <Duration seconds={checkIn.duration / 1000} />
                   ) : (

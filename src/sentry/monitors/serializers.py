@@ -7,6 +7,7 @@ from typing_extensions import TypedDict
 
 from sentry.api.serializers import ProjectSerializerResponse, Serializer, register, serialize
 from sentry.models import Project
+from sentry.monitors.models import HTTPCheckIn, PingCheckIn, SSLCheckIn
 from sentry.monitors.utils import fetch_associated_groups
 
 from .models import Monitor, MonitorCheckIn, MonitorEnvironment, MonitorStatus
@@ -172,7 +173,6 @@ class MonitorCheckInSerializer(Serializer):
             if obj.monitor_environment
             else None,
             "status": obj.get_status_display(),
-            "status_code": obj.status_code,
             "duration": obj.duration,
             "dateCreated": obj.date_added,
             "attachmentId": obj.attachment_id,
@@ -182,6 +182,15 @@ class MonitorCheckInSerializer(Serializer):
 
         if self._expand("groups"):
             result["groups"] = attrs.get("groups", [])
+
+        obj_type = type(obj)
+        if obj_type == HTTPCheckIn:
+            result["status_code"] = obj.status_code
+        elif obj_type == PingCheckIn:
+            result["packets_sent"] = obj.packets_sent
+            result["packets_received"] = obj.packets_received
+        elif obj_type == SSLCheckIn:
+            result["expiration_date"] = obj.expiration_date
 
         return result
 
@@ -202,4 +211,7 @@ class MonitorCheckInSerializerResponse(TypedDict):
     attachmentId: str
     expectedTime: datetime
     monitorConfig: Any
+    packets_sent: int
+    packets_received: int
+    expiration_date: datetime
     group_ids: List[str]

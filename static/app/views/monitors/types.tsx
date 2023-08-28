@@ -117,7 +117,10 @@ export interface MonitorStat {
 export interface CheckIn {
   dateCreated: string;
   duration: number;
+  expiration_date: string;
   id: string;
+  packets_received: number;
+  packets_sent: number;
   status: CheckInStatus;
   status_code: number;
   attachmentId?: number;

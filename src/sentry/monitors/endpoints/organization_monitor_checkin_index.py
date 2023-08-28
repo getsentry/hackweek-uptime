@@ -16,7 +16,7 @@ from sentry.apidocs.constants import RESPONSE_FORBIDDEN, RESPONSE_NOT_FOUND, RES
 from sentry.apidocs.parameters import GlobalParams, MonitorParams
 from sentry.apidocs.utils import inline_sentry_response_serializer
 from sentry.models import ProjectKey
-from sentry.monitors.models import MonitorCheckIn
+from sentry.monitors.models import HTTPCheckIn, MonitorCheckIn, MonitorType, PingCheckIn, SSLCheckIn
 from sentry.monitors.serializers import MonitorCheckInSerializer, MonitorCheckInSerializerResponse
 
 from .base import MonitorEndpoint
@@ -55,11 +55,32 @@ class OrganizationMonitorCheckInIndexEndpoint(MonitorEndpoint):
         if start is None or end is None:
             raise ParseError(detail="Invalid date range")
 
-        queryset = MonitorCheckIn.objects.filter(
-            monitor_id=monitor.id,
-            date_added__gte=start,
-            date_added__lte=end,
-        )
+        if monitor.type == MonitorType.CRON_JOB:
+            queryset = MonitorCheckIn.objects.filter(
+                monitor_id=monitor.id,
+                date_added__gte=start,
+                date_added__lte=end,
+            )
+        elif monitor.type == MonitorType.UPTIME:
+            uptime_type = monitor.config.get("uptime_type")
+            if uptime_type in ["get", None]:
+                queryset = HTTPCheckIn.objects.filter(
+                    monitor_id=monitor.id,
+                    date_added__gte=start,
+                    date_added__lte=end,
+                )
+            elif uptime_type == "ping":
+                queryset = PingCheckIn.objects.filter(
+                    monitor_id=monitor.id,
+                    date_added__gte=start,
+                    date_added__lte=end,
+                )
+            elif uptime_type == "ssl":
+                queryset = SSLCheckIn.objects.filter(
+                    monitor_id=monitor.id,
+                    date_added__gte=start,
+                    date_added__lte=end,
+                )
 
         environments = get_environments(request, organization)
 
